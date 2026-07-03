@@ -1,8 +1,31 @@
-# 🚀 Setup ARC Controller in Kubernetes Using Helm
 
-## 📦 Install ARC Controller
+# 🚀 GitHub Actions Runner Controller (ARC) Setup on Kubernetes
 
-```bash
+This guide explains how to install and configure **GitHub Actions Runner Controller (ARC)** using Helm on Kubernetes.
+
+---
+
+# 🧱 Architecture Overview
+
+```text id="arch1"
+GitHub Repository
+        ↓
+ARC Controller (arc-systems namespace)
+        ↓
+AutoscalingRunnerSet (arc-runners namespace)
+        ↓
+Listener Pod (created automatically)
+        ↓
+Runner Pods (created only when GitHub job runs)
+```
+
+---
+
+# ⚙️ 1. Install ARC Controller
+
+## 📦 Create namespace and install controller
+
+```bash id="c1"
 NAMESPACE="arc-systems"
 
 helm install arc \
@@ -13,63 +36,57 @@ helm install arc \
 
 ---
 
-## 🔍 Check Controller Status
+## 🔍 Verify controller installation
 
-```bash
+```bash id="c2"
 kubectl get all -n arc-systems
 ```
 
-### Example Output
+### Example output
 
-```text
-NAME                                         READY   STATUS    RESTARTS   AGE
-pod/arc-gha-rs-controller-7c668d7847-pjrld   1/1     Running   0          28s
+```text id="out1"
+NAME                                         READY   STATUS    AGE
+pod/arc-gha-rs-controller-xxxx               1/1     Running   1m
 
-NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/arc-gha-rs-controller   1/1     1            1           28s
-
-NAME                                               DESIRED   CURRENT   READY   AGE
-replicaset.apps/arc-gha-rs-controller-7c668d7847   1         1         1       28s
+NAME                                    READY   UP-TO-DATE   AVAILABLE
+deployment.apps/arc-gha-rs-controller   1/1     1            1
 ```
 
 ---
 
-## 🔍 Check Pods Only
+# 🔐 2. Create GitHub PAT Token
 
-```bash
-kubectl get pods -n arc-systems
+Go to:
+
+```text id="pat1"
+GitHub → Settings → Developer Settings → Personal Access Tokens
 ```
 
-### Example Output
+### Required permissions:
 
-```text
-NAME                                     READY   STATUS    RESTARTS   AGE
-arc-gha-rs-controller-7c668d7847-pjrld   1/1     Running   0          42s
-```
+For repository runners:
+
+* `repo`
+* `workflow`
+
+For organization runners:
+
+* `admin:org`
 
 ---
 
-# 🔐 GitHub PAT Token Setup
+# ⚙️ 3. Install Runner Scale Set
 
-Create a Personal Access Token:
+## 📦 Deploy ARC runners
 
-```text
-GitHub → Settings → Developer settings → Personal access tokens
-→ Fine-grained personal access token
-```
-
----
-
-# ⚙️ Configure Runner Scale Set
-
-## 📦 Install Runner Scale Set
-
-```bash
+```bash id="c3"
 INSTALLATION_NAME="arc-runner-set"
 NAMESPACE="arc-runners"
-GITHUB_CONFIG_URL="https://github.com/<your_org_or_repo>"
-GITHUB_PAT="<PAT>"
+GITHUB_CONFIG_URL="https://github.com/<owner>/<repo>"
+GITHUB_PAT="<YOUR_PAT>"
+```
 
+```bash id="c4"
 helm install "${INSTALLATION_NAME}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
@@ -80,60 +97,143 @@ helm install "${INSTALLATION_NAME}" \
 
 ---
 
-## 📋 Verify Helm Releases
+# 📊 4. Verify Installation
 
-```bash
+## Check Helm releases
+
+```bash id="c5"
 helm list -A
 ```
 
 ---
 
-## 📊 Check Autoscaling Runner Set
+## Check Autoscaling Runner Set
 
-```bash
+```bash id="c6"
 kubectl get autoscalingrunnersets -n arc-runners
 ```
 
-```bash
-kubectl get ephemerarunnersets -n arc-runners
-kubectl get ephemerarunners -n arc-runners
+Example:
+
+```text id="out2"
+NAME              STATE
+arc-runner-set    Running
 ```
 
 ---
 
-## 🧠 Verify Listener Pod
+# 🧠 5. Understand ARC Resources
 
-After setup, you should see the listener in `arc-systems`:
+## Important resources in ARC v0.14+
 
-```bash
+| Resource               | Purpose                      |
+| ---------------------- | ---------------------------- |
+| `AutoscalingRunnerSet` | Defines runner configuration |
+| Listener Pod           | Connects to GitHub           |
+| Runner Pods            | Execute CI jobs              |
+
+---
+
+### ❌ NOT USED in this version:
+
+```text id="wrong"
+ephemerarunnersets ❌ (does not exist in v0.14+)
+ephemerarunners ❌ (removed/renamed in newer versions)
+```
+
+---
+
+# 👀 6. Check Listener Pod
+
+After successful setup:
+
+```bash id="c7"
 kubectl get pods -n arc-systems
 ```
 
-### Example Output
+Example:
 
-```text
-NAME                                     READY   STATUS    RESTARTS   AGE
-arc-gha-rs-controller-7c668d7847-pjrld   1/1     Running   0          22m
-arc-runner-set-d7ffb588-listener         1/1     Running   0          92s
+```text id="out3"
+arc-gha-rs-controller-xxxx   1/1 Running
+arc-runner-set-xxxx-listener 1/1 Running
 ```
 
 ---
 
-## 🏃 Watch Runner Pods
+# 🏃 7. Watch Runner Pods
 
-```bash
+```bash id="c8"
 kubectl get pods -n arc-runners -w
 ```
 
 ---
 
-# 🎯 Summary
+# 🧪 8. Test Runner (GitHub Workflow)
 
-* ARC Controller runs in `arc-systems`
-* Runner Scale Set runs in `arc-runners`
-* Listener pod is created automatically
-* Runner pods are created only when GitHub jobs run
+Create workflow:
+
+```yaml id="wf1"
+name: ARC Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: arc-runner-set
+    steps:
+      - run: echo "Hello from ARC 🚀"
+```
 
 ---
 
-If you want, I can also convert this into a **GitHub README with architecture diagram + troubleshooting section**.
+# 🎯 Expected Behavior
+
+When workflow runs:
+
+```text id="flow2"
+GitHub Job triggered
+        ↓
+Listener receives job
+        ↓
+ARC creates runner pod
+        ↓
+Runner executes job
+        ↓
+Pod is deleted after completion
+```
+
+---
+
+# 🚨 Common Issues
+
+## ❌ AutoscalingRunnerSet stuck in Pending
+
+* Invalid PAT
+* Wrong GitHub URL
+* Missing repo access
+
+---
+
+## ❌ No runner pods created
+
+* No workflow triggered
+* Wrong `runs-on` label
+
+---
+
+## ❌ Listener not created
+
+* GitHub authentication failure
+
+---
+
+# ✅ Final Summary
+
+* ARC Controller runs in `arc-systems`
+* Runner Scale Set runs in `arc-runners`
+* Listener is auto-created by controller
+* Runner pods appear only when jobs run
+* No manual runner installation required
+
+---

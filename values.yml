@@ -1,0 +1,6 @@
+githubConfigUrl: https://github.com/Nikhilgujela/Github-ARC-setup-on-Kubernetes
+
+githubConfigSecret:
+  github_token: 
+
+runnerGroup: MY-RUNNER-GROUP-NONPROD
